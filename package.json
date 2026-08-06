@@ -1,0 +1,17 @@
+{
+  "name": "marketplace-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test": "playwright test",
+    "test:marketing": "playwright test --project=marketing",
+    "test:app": "playwright test --project=app",
+    "test:flows": "playwright test --project=flows",
+    "test:ui": "playwright test --ui",
+    "report": "playwright show-report",
+    "install-browsers": "playwright install --with-deps"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0"
+  }
+}
