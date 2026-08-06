@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 // Ten projekt celowo nie ma baseURL — test przechodzi między domenami
 // (Next -> MF app), więc nawigujemy pełnymi URL-ami. Patrz plan-wdrozenia-marketplace.md pkt 9.
 const MARKETING_URL = process.env.MARKETING_URL ?? 'http://localhost:3000';
-const APP_URL = process.env.APP_URL ?? 'http://localhost:3001';
+const APP_URL = process.env.APP_URL ?? 'http://localhost:8080';
 
 test('gość: SSR listing -> zapytanie -> redirect do MF app -> rejestracja -> zlecenie', async ({ page }) => {
   await page.goto(`${MARKETING_URL}/uslugi/hydraulik/warszawa`);

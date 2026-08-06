@@ -1,64 +1,92 @@
 # marketplace-e2e
 
-Osobne repo z testami Playwright dla całego marketplace'u. Nie należy ani do repo
-Next (`domena.pl`), ani do repo MF app (`app.domena.pl`) — bo testy z folderu
-`tests/flows/` przechodzą przez oba naraz.
+Osobne repo z testami Playwright dla całego marketplace'u. Nie należy ani do
+repo Next (`domena.pl`), ani do repo MF app — bo część testów przechodzi przez
+kilka apek naraz.
+
+"MF app" to w rzeczywistości trzy procesy: `frontend-shell` (host, port
+8080), `react-app` (MF remote, port 8081) i `backend` (port 3000, prawdziwe
+auth + baza Postgres).
 
 ## Struktura
 
 ```
 tests/
   marketing/   # testy tylko na Next (baseURL = MARKETING_URL)
-  app/         # testy tylko na MF app (baseURL = APP_URL)
+  app/         # testy tylko na frontend-shell (baseURL = APP_URL)
+    auth.spec.ts        # login/logout przez prawdziwy backend
+    test-user.ts         # stałe fixture usera, nadpisywalne env-ami
+    global-setup.ts       # sieje fixture usera bezpośrednio w Postgresie
+    global-teardown.ts    # sprząta fixture usera po testach
   flows/       # testy przechodzące między domenami, pełne URL-e, bez baseURL
 ```
 
-## Migracja z repo MF app
-
-1. W repo MF app znajdź dotychczasowy `playwright.config.ts` i folder `tests/`.
-2. Skopiuj zawartość `tests/` (same pliki `.spec.ts`, bez configu) do `tests/app/`
-   w tym repo. Zamień w nich bezwzględne URL-e na względne — `baseURL` już to
-   załatwia (patrz `tests/app/login.spec.ts`, plik zastąp realną treścią).
-3. W repo MF app usuń `@playwright/test` z `devDependencies`, usuń
-   `playwright.config.ts` i folder `tests/` (lub katalog e2e, jak się nazywał),
-   usuń skrypt `test:e2e` z `package.json`.
-4. Sprawdź czy jakiś workflow CI w repo MF app odpalał Playwrighta —
-   jeśli tak, usuń ten krok stamtąd (e2e przenosi się tutaj, patrz niżej).
-
 ## Uruchamianie lokalnie
 
-Apki żyją w osobnych repo, więc trzeba je odpalić ręcznie przed testami:
+Cztery apki, cztery terminale:
 
 ```bash
-# terminal 1 (repo Next)
-pnpm dev   # http://localhost:3000
+# terminal 1 — repo next-app
+pnpm dev            # http://localhost:3000 (marketing)
 
-# terminal 2 (repo MF app)
-pnpm dev   # http://localhost:3001
+# terminal 2 — repo backend
+pnpm start:dev       # http://localhost:3000 -> UWAGA na kolizję portu z next-app,
+                      # patrz sekcja "Kolizja portów" niżej
 
-# terminal 3 (to repo)
+# terminal 3 — repo react-app
+pnpm dev             # http://localhost:8081 (MF remote)
+
+# terminal 4 — repo frontend-shell
+pnpm dev             # http://localhost:8080 (MF host)
+```
+
+Piąty terminal na same testy:
+
+```bash
+cd e2e-tests
 cp .env.example .env
+set -a; source .env; set +a   # eksportuje zmienne z .env do shella (brak dotenv w configu)
 npm install
+npm install pg argon2 --save-dev   # potrzebne przez tests/app/global-setup.ts
 npx playwright install --with-deps
 npm test
 ```
 
 Albo pojedynczy projekt: `npm run test:marketing` / `npm run test:app` / `npm run test:flows`.
 
+`test:app` (czyli `auth.spec.ts`) wymaga działającego `backend` i osiągalnego
+Postgresa — bez tego `global-setup.ts` wywali się od razu z czytelnym błędem.
+
+## Kolizja portów: next-app vs backend
+
+Domyślny port Next.js (`3000`) pokrywa się z domyślnym portem backendu. Jeśli
+oba repo faktycznie próbują wystartować na 3000 lokalnie, jedno z nich musi
+mieć zmieniony port (np. next-app na inny, z odpowiednią zmianą
+`MARKETING_URL` w `.env`). Sprawdź jak to masz obecnie skonfigurowane w
+next-app zanim odpalisz oba naraz.
+
 ## Ważne: cookie sesji nie jest testowane lokalnie
 
-Cookie sesji ma `Domain=.domena.pl`. Na `localhost:3000` / `localhost:3001` to dwa
-różne originy (różne porty), nie subdomeny tej samej domeny — więc lokalny przebieg
-`tests/flows/` sprawdza samą ścieżkę funkcjonalną, ale NIE potwierdza, że sesja
-faktycznie przechodzi między Next a MF app. Realną weryfikację cookie robi dopiero
-przebieg w CI na staging (prawdziwe subdomeny `staging.domena.pl` /
-`staging-app.domena.pl`, patrz `.github/workflows/e2e.yml`).
+Cookie sesji (docelowo `Domain=.domena.pl`) na `localhost` to różne originy
+(różne porty), nie subdomeny tej samej domeny — więc lokalny przebieg
+`tests/flows/` sprawdza samą ścieżkę funkcjonalną, ale NIE potwierdza że
+sesja faktycznie przechodzi między Next a MF app. Realną weryfikację robi
+dopiero przebieg w CI na staging z prawdziwymi subdomenami.
+
+## CI
+
+Workflow (`.github/workflows/e2e.yml`) odpala tylko `marketing` + `flows`
+przeciw staging. Projekt `app` (auth przez prawdziwy backend + Postgres)
+zostaje na razie lokalny — wystawienie backendu i bazy w CI to osobny temat
+do domknięcia (tak samo jak było nierozwiązane w oryginalnym repo
+frontend-shell, skąd te testy pochodzą).
 
 ## Wpięcie do CI innych repo
 
-Żeby e2e odpalało się automatycznie po deployu Next lub MF app na staging, dodaj
-w ich workflowach krok wysyłający `repository_dispatch` do tego repo (potrzebny
-PAT z uprawnieniem `repo`, zapisany jako sekret `E2E_REPO_PAT` w repo źródłowym):
+Żeby e2e odpalało się automatycznie po deployu Next lub MF app na staging,
+dodaj w ich workflowach krok wysyłający `repository_dispatch` do tego repo
+(potrzebny PAT z uprawnieniem `repo`, zapisany jako sekret `E2E_REPO_PAT` w
+repo źródłowym):
 
 ```yaml
 - name: Trigger e2e
@@ -66,9 +94,23 @@ PAT z uprawnieniem `repo`, zapisany jako sekret `E2E_REPO_PAT` w repo źródłow
     curl -X POST \
       -H "Authorization: token ${{ secrets.E2E_REPO_PAT }}" \
       -H "Accept: application/vnd.github+json" \
-      https://api.github.com/repos/<owner>/marketplace-e2e/dispatches \
+      https://api.github.com/repos/szczypkaweb/marketplace-e2e/dispatches \
       -d '{"event_type":"staging-deployed"}'
 ```
 
 Do czasu wpięcia tego kroku, e2e i tak leci co noc o 5:00 UTC (`schedule` w
 workflow) i można je odpalić ręcznie (`workflow_dispatch`).
+
+## Sprzątanie w repo frontend-shell
+
+Testy auth pochodzą z repo `frontend-shell` (`e2e/` w tamtym repo). Po
+migracji tutaj, w `frontend-shell`:
+
+```bash
+npm uninstall @playwright/test pg argon2
+rm -rf e2e/ playwright.config.ts
+```
+
+i usuń skrypt `test:e2e` z jego `package.json` (jeśli nie było tam wpiętego
+kroku CI dla Playwrighta, nic więcej nie trzeba zmieniać w workflowach tego
+repo).
