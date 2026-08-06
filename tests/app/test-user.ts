@@ -11,12 +11,20 @@ export const TEST_USER_PASSWORD = process.env.E2E_TEST_PASSWORD ?? 'E2eTestPassw
 // endpoint (only POST /auth/login is exposed), so a real row has to exist
 // before this test can log in.
 //
-// Defaults to the same local database backend/.env.example documents
-// (DB_USER=dev, DB_PASSWORD=dev_password, DB_NAME=projekt via
-// backend/docker-compose.yml). Set E2E_DATABASE_URL to match whatever
-// DATABASE_URL your running backend actually uses if it differs.
-export const DATABASE_URL =
-  process.env.E2E_DATABASE_URL ?? 'postgresql://dev:dev_password@localhost:5432/projekt';
+// No local fallback on purpose: the backend does NOT talk to a local
+// docker-compose Postgres (that assumption was stale, left over from before
+// the backend moved to Supabase — see backend/.env's DATABASE_URL). Silently
+// falling back to a guessed local connection string would seed the wrong
+// database without any error, which is exactly what happened once already.
+// Copy DATABASE_URL from backend/.env into e2e-tests/.env as E2E_DATABASE_URL.
+if (!process.env.E2E_DATABASE_URL) {
+  throw new Error(
+    '[e2e] E2E_DATABASE_URL is not set. Copy the DATABASE_URL value from backend/.env ' +
+      'into e2e-tests/.env as E2E_DATABASE_URL — the backend connects to Supabase, not a ' +
+      'local Postgres, so there is no safe default to fall back to.',
+  );
+}
+export const DATABASE_URL = process.env.E2E_DATABASE_URL;
 
 // Backend base URL. Mirrors frontend-shell's own API_URL default so the
 // assertion about the Google OAuth button's href stays correct even if

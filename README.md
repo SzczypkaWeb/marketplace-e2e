@@ -45,6 +45,8 @@ Piąty terminal na same testy:
 ```bash
 cd e2e-tests
 cp .env.example .env
+# W .env ustaw E2E_DATABASE_URL na DOKŁADNIE tę samą wartość co DATABASE_URL
+# w backend/.env (obecnie Supabase, nie lokalny Postgres — patrz sekcja niżej).
 set -a; source .env; set +a   # eksportuje zmienne z .env do shella (brak dotenv w configu)
 npm install
 npm install pg argon2 --save-dev   # potrzebne przez tests/app/global-setup.ts
@@ -54,8 +56,23 @@ npm test
 
 Albo pojedynczy projekt: `npm run test:marketing` / `npm run test:app` / `npm run test:flows`.
 
-`test:app` (czyli `auth.spec.ts`) wymaga działającego `backend` i osiągalnego
-Postgresa — bez tego `global-setup.ts` wywali się od razu z czytelnym błędem.
+`test:app` (czyli `auth.spec.ts`) wymaga działającego `backend` i tej samej
+bazy co backend faktycznie używa — bez tego `global-setup.ts` albo wywali się
+(brak `E2E_DATABASE_URL`), albo — gorzej — wsieje usera do bazy, której
+backend w ogóle nie widzi (i login się wywali z mylącym "Invalid email or
+password").
+
+## Baza: Supabase, nie lokalny Postgres
+
+Backend (przynajmniej ten, z którym testowałem) łączy się ze zdalną bazą na
+Supabase (`*.pooler.supabase.com`), a nie z lokalnym Postgresem uruchamianym
+przez `docker-compose` — to była błędna założenie przeniesione 1:1 z
+oryginalnego repo frontend-shell (sprzed migracji backendu na GCP/Supabase).
+Zanim uznasz `E2E_DATABASE_URL` za "gotowe i zapomniane": to realna zdalna
+baza — jeśli jest współdzielona ze staging albo z realnymi danymi, seedowanie
+fixture usera przy każdym uruchomieniu testów lokalnie może nie być czymś,
+co chcesz robić bez zastanowienia. Rozważ dedykowaną bazę/branch Supabase
+tylko do dev/testów, jeśli jeszcze takiej nie ma.
 
 ## Kolizja portów: next-app vs backend
 

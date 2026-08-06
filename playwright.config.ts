@@ -1,5 +1,9 @@
+import 'dotenv/config';
 import { defineConfig, devices } from '@playwright/test';
 
+// Ładuje .env automatycznie (wymaga `dotenv` w devDependencies) — nie trzeba
+// już ręcznie `set -a; source .env; set +a` przed każdym uruchomieniem.
+//
 // Repozytoria Next (marketing) i MF app (frontend-shell + react-app) są
 // osobne, więc ten config NIE odpala ich sam (brak pola `webServer`).
 // Serwery muszą już działać pod tymi adresami — lokalnie uruchomione ręcznie
