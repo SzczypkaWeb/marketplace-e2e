@@ -21,13 +21,6 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'html',
-  // Siewa/czyści fixture usera w Postgresie backendu przed/po testem auth
-  // (tests/app/auth.spec.ts). Uwaga: to top-level opcja Playwrighta — leci
-  // przy KAŻDYM `playwright test`, nawet `--project=marketing`, więc
-  // uruchomienie samych testów marketingowych i tak wymaga dostępnego
-  // Postgresa. Patrz komentarz w tests/app/global-setup.ts.
-  globalSetup: './tests/app/global-setup.ts',
-  globalTeardown: './tests/app/global-teardown.ts',
   use: {
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
@@ -38,9 +31,30 @@ export default defineConfig({
       testDir: './tests/marketing',
       use: { ...devices['Desktop Chrome'], baseURL: MARKETING_URL },
     },
+    // Seeds/cleans the fixture user in the backend's Postgres - scoped as
+    // Playwright "setup"/"teardown" projects (not top-level globalSetup/
+    // globalTeardown, which used to run before EVERY invocation regardless
+    // of --project, so a marketing-only run needed Postgres reachable too).
+    // Only `app` depends on these, so `marketing`/`flows` runs never need
+    // E2E_DATABASE_URL set - this is what makes it safe to wire `app` into
+    // CI without breaking runs that don't have DB access (see
+    // .github/workflows/e2e.yml).
+    {
+      name: 'app-setup',
+      testDir: './tests/app',
+      testMatch: /auth\.setup\.ts/,
+    },
+    {
+      name: 'app-teardown',
+      testDir: './tests/app',
+      testMatch: /auth\.teardown\.ts/,
+    },
     {
       name: 'app',
       testDir: './tests/app',
+      testMatch: /auth\.spec\.ts/,
+      dependencies: ['app-setup'],
+      teardown: 'app-teardown',
       use: { ...devices['Desktop Chrome'], baseURL: APP_URL },
     },
     {

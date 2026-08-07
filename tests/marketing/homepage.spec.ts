@@ -1,8 +1,5 @@
 import { test, expect } from '@playwright/test';
 
-// Ten projekt ma baseURL ustawiony na MARKETING_URL (patrz playwright.config.ts),
-// więc page.goto('/') trafia w Next.js.
-
 test('strona główna pokazuje wyszukiwarkę i wykrytą lokalizację', async ({ page }) => {
   await page.goto('/');
 

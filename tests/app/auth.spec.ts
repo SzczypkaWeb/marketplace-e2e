@@ -10,7 +10,8 @@ import { TEST_USER_EMAIL, TEST_USER_PASSWORD, API_BASE_URL } from './test-user';
 // Requires the backend (http://localhost:3000, or whatever API_URL points
 // at) running separately — see README.md for the full multi-app setup,
 // including how the email/password fixture user this test logs in as gets
-// seeded (tests/app/global-setup.ts).
+// seeded (tests/app/auth.setup.ts, a Playwright "setup project" - see
+// playwright.config.ts).
 test.describe('Auth flow', () => {
   test('logged-out visitor sees LoginScreen, logs in, and logs out', async ({ page }) => {
     // Track every request to the protected GET /users endpoint so we can

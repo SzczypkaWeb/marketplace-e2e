@@ -7,7 +7,7 @@ export const TEST_USER_EMAIL = process.env.E2E_TEST_EMAIL ?? 'e2e-test-user@exam
 export const TEST_USER_PASSWORD = process.env.E2E_TEST_PASSWORD ?? 'E2eTestPassword123!';
 
 // Postgres connection used to seed/clean up the fixture user directly (see
-// global-setup.ts / global-teardown.ts) - the backend has no public register
+// auth.setup.ts / auth.teardown.ts) - the backend has no public register
 // endpoint (only POST /auth/login is exposed), so a real row has to exist
 // before this test can log in.
 //

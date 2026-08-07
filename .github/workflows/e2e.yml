@@ -3,11 +3,47 @@ name: E2E
 on:
   workflow_dispatch:
   # Repo Next i repo MF app mogą to odpalać po własnym deployu na staging
-  # (patrz README.md, sekcja "Wpięcie do CI innych repo").
+  # (patrz README.md, sekcja "Wpięcie do CI innych repo") - albo jako
+  # workflow_call (patrz niżej - preferowane, bo daje needs: e2e do gate'owania
+  # promote-to-prod w tym samym przebiegu), albo jako repository_dispatch
+  # (jednokierunkowe, bez informacji zwrotnej - trzymane jako fallback).
   repository_dispatch:
     types: [staging-deployed]
   schedule:
     - cron: '0 5 * * *' # nightly, 5:00 UTC
+  # Pozwala innym repo wywołać ten workflow jako zwykły job
+  # (`uses: szczypkaweb/marketplace-e2e/.github/workflows/e2e.yml@main`) zamiast
+  # osobnego przebiegu bez powiązania. Efekt: wywołujący workflow dostaje
+  # `needs.<job_id>.result` (success/failure) w TYM SAMYM przebiegu, więc może
+  # bezpośrednio zbudować na tym job "promote to prod" (`needs: e2e`,
+  # `if: needs.e2e.result == 'success'`) - bez callbacków między repo, których
+  # repository_dispatch sam z siebie nie daje.
+  workflow_call:
+    inputs:
+      marketing_url:
+        description: 'Base URL for tests/marketing (next-app staging deploy)'
+        type: string
+        required: false
+        default: https://staging.domena.pl
+      app_url:
+        description: 'Base URL for tests/app + tests/flows (frontend-shell staging deploy)'
+        type: string
+        required: false
+        default: https://staging-app.domena.pl
+      api_url:
+        description: 'Base URL for the backend (only used by tests/app/auth.spec.ts, e.g. a Cloud Run staging URL)'
+        type: string
+        required: false
+        default: https://staging-api.domena.pl
+    secrets:
+      E2E_DATABASE_URL:
+        description: >
+          Postgres connection string for seeding/cleaning the tests/app fixture
+          user (see tests/app/auth.setup.ts). OPTIONAL: when omitted, the `app`
+          project is skipped entirely and only marketing+flows run - this is a
+          safe fallback, not a failure, since most callers won't have a staging
+          backend+DB to point at yet.
+        required: false
 
 jobs:
   e2e:
@@ -23,13 +59,35 @@ jobs:
 
       - run: npx playwright install --with-deps
 
-      # Tylko marketing + flows. Projekt `app` (tests/app/auth.spec.ts) wymaga
-      # bezpośredniego dostępu do Postgresa backendu (siew fixture usera) —
-      # niewpięte do CI, patrz README.md.
-      - run: npx playwright test --project=marketing --project=flows
+      # `inputs.*` są ustawione tylko gdy ten workflow jest wywołany przez
+      # workflow_call - przy pozostałych triggerach (workflow_dispatch/
+      # repository_dispatch/schedule) `inputs.*` jest puste, więc `||` spada
+      # na te same wartości co poprzednio (hardkodowane staging URL-e).
+      # Docelowo do zastąpienia przez GitHub Environment variables (patrz
+      # task "GitHub Environments: wpięcie staging/production").
+      #
+      # `secrets.E2E_DATABASE_URL` działa tak samo niezależnie od triggera:
+      # dla workflow_call to, co przekazał wywołujący (patrz README.md); dla
+      # pozostałych triggerów - sekret tego repo o tej samej nazwie (jeśli
+      # ustawiony w Settings -> Secrets tego repo).
+      - name: Determine which projects to run
+        id: projects
+        run: |
+          if [ -n "$E2E_DATABASE_URL" ]; then
+            echo "list=--project=marketing --project=app --project=flows" >> "$GITHUB_OUTPUT"
+          else
+            echo "list=--project=marketing --project=flows" >> "$GITHUB_OUTPUT"
+            echo "::notice::E2E_DATABASE_URL not set - skipping the 'app' project (needs a live backend + DB). See README.md."
+          fi
         env:
-          MARKETING_URL: https://staging.domena.pl
-          APP_URL: https://staging-app.domena.pl
+          E2E_DATABASE_URL: ${{ secrets.E2E_DATABASE_URL }}
+
+      - run: npx playwright test ${{ steps.projects.outputs.list }}
+        env:
+          MARKETING_URL: ${{ inputs.marketing_url || 'https://staging.domena.pl' }}
+          APP_URL: ${{ inputs.app_url || 'https://staging-app.domena.pl' }}
+          API_URL: ${{ inputs.api_url || 'https://staging-api.domena.pl' }}
+          E2E_DATABASE_URL: ${{ secrets.E2E_DATABASE_URL }}
 
       - uses: actions/upload-artifact@v4
         if: always()
