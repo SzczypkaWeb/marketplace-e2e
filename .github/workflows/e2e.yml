@@ -44,6 +44,18 @@ on:
           safe fallback, not a failure, since most callers won't have a staging
           backend+DB to point at yet.
         required: false
+      E2E_REPO_CHECKOUT_TOKEN:
+        description: >
+          Fine-grained PAT (Contents: Read-only on this repo) used to check out
+          THIS repo's own code when called cross-repo via workflow_call. The
+          ambient GITHUB_TOKEN in the CALLER's context has no read access to
+          this repo's contents, even when this repo's Settings -> Actions ->
+          Access allows the workflow_call itself to run - those are two
+          different permissions. OPTIONAL: falls back to github.token, which
+          is enough when this workflow runs on ITS OWN triggers
+          (workflow_dispatch/schedule/repository_dispatch), just not when
+          invoked from another repo.
+        required: false
 
 jobs:
   e2e:
@@ -60,6 +72,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: szczypkaweb/marketplace-e2e
+          token: ${{ secrets.E2E_REPO_CHECKOUT_TOKEN || github.token }}
 
       - uses: actions/setup-node@v4
         with:
