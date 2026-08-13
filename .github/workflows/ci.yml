@@ -22,5 +22,12 @@ jobs:
 
       - run: npm ci
 
+      # --list still IMPORTS every spec/setup/teardown file to build the test
+      # tree, even though it never executes them - and tests/app/test-user.ts
+      # throws at module load (not call time) if E2E_DATABASE_URL is unset,
+      # by design, so real CI runs never silently skip DB-dependent fixtures.
+      # A fake value is enough here: --list never actually opens a connection.
       - name: Parse all specs (no run)
         run: npx playwright test --list
+        env:
+          E2E_DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
