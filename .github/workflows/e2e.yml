@@ -21,20 +21,22 @@ on:
   workflow_call:
     inputs:
       marketing_url:
-        description: 'Base URL for tests/marketing (next-app staging deploy)'
+        description: >
+          Base URL for tests/marketing and tests/flows (next-app staging
+          deploy). No default on purpose (see note below) - OPTIONAL: when
+          omitted, both `marketing` and `flows` are skipped entirely, since
+          most callers (backend, react-app, frontend-shell) don't know
+          next-app's URL and have no business guessing it.
         type: string
         required: false
-        default: https://staging.domena.pl
       app_url:
         description: 'Base URL for tests/app + tests/flows (frontend-shell staging deploy)'
         type: string
         required: false
-        default: https://staging-app.domena.pl
       api_url:
         description: 'Base URL for the backend (only used by tests/app/auth.spec.ts, e.g. a Cloud Run staging URL)'
         type: string
         required: false
-        default: https://staging-api.domena.pl
     secrets:
       E2E_DATABASE_URL:
         description: >
@@ -82,34 +84,55 @@ jobs:
 
       - run: npx playwright install --with-deps
 
+      # Each project is included only when the URL(s) it actually needs were
+      # supplied - same safe-fallback philosophy as the pre-existing
+      # E2E_DATABASE_URL gating below, just extended to marketing/flows too.
+      # Previously marketing_url/app_url/api_url had hardcoded
+      # `https://staging*.domena.pl` defaults from before next-app/react-app/
+      # frontend-shell had any real staging deploy - once backend/react-app/
+      # frontend-shell actually started calling this workflow for real, that
+      # placeholder domain (which resolves to nothing) turned "no URL
+      # provided" into a hard failure instead of a skip. None of those three
+      # callers know next-app's URL, so `marketing`/`flows` should always be
+      # skipped when called from them - that's expected, not broken.
+      #
       # `inputs.*` are only set when this workflow is invoked via
       # workflow_call - on the other triggers (workflow_dispatch/
-      # repository_dispatch/schedule) `inputs.*` is empty, so `||` falls back
-      # to the same values as before (hardcoded staging URLs). Eventually to
-      # be replaced by GitHub Environment variables (see the task "GitHub
-      # Environments: wiring in staging/production").
-      #
-      # `secrets.E2E_DATABASE_URL` works the same regardless of trigger: for
-      # workflow_call it's whatever the caller passed (see README.md); for
-      # the other triggers - this repo's own secret of the same name (if set
-      # in this repo's Settings -> Secrets).
+      # repository_dispatch/schedule) `inputs.*` is empty, so today those
+      # triggers only ever run `app` (if E2E_DATABASE_URL is set as this
+      # repo's own secret). Pass marketing_url/app_url explicitly via
+      # workflow_dispatch once there's a real URL to point at.
       - name: Determine which projects to run
         id: projects
         run: |
-          if [ -n "$E2E_DATABASE_URL" ]; then
-            echo "list=--project=marketing --project=app --project=flows" >> "$GITHUB_OUTPUT"
+          PROJECTS=""
+          if [ -n "$MARKETING_URL" ]; then
+            PROJECTS="$PROJECTS --project=marketing"
           else
-            echo "list=--project=marketing --project=flows" >> "$GITHUB_OUTPUT"
+            echo "::notice::marketing_url not set - skipping the 'marketing' project."
+          fi
+          if [ -n "$E2E_DATABASE_URL" ]; then
+            PROJECTS="$PROJECTS --project=app"
+          else
             echo "::notice::E2E_DATABASE_URL not set - skipping the 'app' project (needs a live backend + DB). See README.md."
           fi
+          if [ -n "$MARKETING_URL" ] && [ -n "$APP_URL" ]; then
+            PROJECTS="$PROJECTS --project=flows"
+          else
+            echo "::notice::marketing_url and/or app_url not set - skipping the 'flows' project (needs both next-app and the MF app)."
+          fi
+          echo "list=$PROJECTS" >> "$GITHUB_OUTPUT"
         env:
+          MARKETING_URL: ${{ inputs.marketing_url }}
+          APP_URL: ${{ inputs.app_url }}
           E2E_DATABASE_URL: ${{ secrets.E2E_DATABASE_URL }}
 
-      - run: npx playwright test ${{ steps.projects.outputs.list }}
+      - if: steps.projects.outputs.list != ''
+        run: npx playwright test ${{ steps.projects.outputs.list }}
         env:
-          MARKETING_URL: ${{ inputs.marketing_url || 'https://staging.domena.pl' }}
-          APP_URL: ${{ inputs.app_url || 'https://staging-app.domena.pl' }}
-          API_URL: ${{ inputs.api_url || 'https://staging-api.domena.pl' }}
+          MARKETING_URL: ${{ inputs.marketing_url }}
+          APP_URL: ${{ inputs.app_url }}
+          API_URL: ${{ inputs.api_url }}
           E2E_DATABASE_URL: ${{ secrets.E2E_DATABASE_URL }}
 
       - uses: actions/upload-artifact@v4
