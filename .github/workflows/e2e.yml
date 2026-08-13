@@ -49,7 +49,17 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     steps:
+      # Explicit `repository:` is required here, not optional. Without it,
+      # actions/checkout defaults to checking out the CALLING repo's content
+      # (frontend-shell/react-app/backend - the caller invoked this workflow
+      # via workflow_call), not this repo's own - the called job "runs as
+      # though part of the caller" by default. That silently checked out a
+      # pnpm project with no package-lock.json in place of this repo's own
+      # tests, so `npm ci` failed with "no package-lock.json found" - a
+      # confusing error that has nothing to do with this repo's actual lockfile.
       - uses: actions/checkout@v4
+        with:
+          repository: szczypkaweb/marketplace-e2e
 
       - uses: actions/setup-node@v4
         with:
