@@ -249,3 +249,4 @@ rm -rf e2e/ playwright.config.ts
 and remove the `test:e2e` script from its `package.json` (if there was no
 Playwright CI step wired up there, nothing else needs to change in that
 repo's workflows).
+/
