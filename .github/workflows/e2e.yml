@@ -2,22 +2,22 @@ name: E2E
 
 on:
   workflow_dispatch:
-  # Repo Next i repo MF app mogą to odpalać po własnym deployu na staging
-  # (patrz README.md, sekcja "Wpięcie do CI innych repo") - albo jako
-  # workflow_call (patrz niżej - preferowane, bo daje needs: e2e do gate'owania
-  # promote-to-prod w tym samym przebiegu), albo jako repository_dispatch
-  # (jednokierunkowe, bez informacji zwrotnej - trzymane jako fallback).
+  # The Next repo and the MF app repo can trigger this after their own
+  # staging deploy (see README.md, "Wiring into other repos' CI" section) -
+  # either as a workflow_call (see below - preferred, since it gives
+  # needs: e2e to gate promote-to-prod in the same run), or as a
+  # repository_dispatch (one-way, no feedback - kept as a fallback).
   repository_dispatch:
     types: [staging-deployed]
   schedule:
     - cron: '0 5 * * *' # nightly, 5:00 UTC
-  # Pozwala innym repo wywołać ten workflow jako zwykły job
-  # (`uses: szczypkaweb/marketplace-e2e/.github/workflows/e2e.yml@main`) zamiast
-  # osobnego przebiegu bez powiązania. Efekt: wywołujący workflow dostaje
-  # `needs.<job_id>.result` (success/failure) w TYM SAMYM przebiegu, więc może
-  # bezpośrednio zbudować na tym job "promote to prod" (`needs: e2e`,
-  # `if: needs.e2e.result == 'success'`) - bez callbacków między repo, których
-  # repository_dispatch sam z siebie nie daje.
+  # Lets other repos call this workflow as a plain job
+  # (`uses: szczypkaweb/marketplace-e2e/.github/workflows/e2e.yml@main`)
+  # instead of a separate, unrelated run. Effect: the calling workflow gets
+  # `needs.<job_id>.result` (success/failure) in THE SAME run, so it can
+  # directly build a "promote to prod" job on top of it (`needs: e2e`,
+  # `if: needs.e2e.result == 'success'`) - without the cross-repo callbacks
+  # that repository_dispatch doesn't give you on its own.
   workflow_call:
     inputs:
       marketing_url:
@@ -59,17 +59,17 @@ jobs:
 
       - run: npx playwright install --with-deps
 
-      # `inputs.*` są ustawione tylko gdy ten workflow jest wywołany przez
-      # workflow_call - przy pozostałych triggerach (workflow_dispatch/
-      # repository_dispatch/schedule) `inputs.*` jest puste, więc `||` spada
-      # na te same wartości co poprzednio (hardkodowane staging URL-e).
-      # Docelowo do zastąpienia przez GitHub Environment variables (patrz
-      # task "GitHub Environments: wpięcie staging/production").
+      # `inputs.*` are only set when this workflow is invoked via
+      # workflow_call - on the other triggers (workflow_dispatch/
+      # repository_dispatch/schedule) `inputs.*` is empty, so `||` falls back
+      # to the same values as before (hardcoded staging URLs). Eventually to
+      # be replaced by GitHub Environment variables (see the task "GitHub
+      # Environments: wiring in staging/production").
       #
-      # `secrets.E2E_DATABASE_URL` działa tak samo niezależnie od triggera:
-      # dla workflow_call to, co przekazał wywołujący (patrz README.md); dla
-      # pozostałych triggerów - sekret tego repo o tej samej nazwie (jeśli
-      # ustawiony w Settings -> Secrets tego repo).
+      # `secrets.E2E_DATABASE_URL` works the same regardless of trigger: for
+      # workflow_call it's whatever the caller passed (see README.md); for
+      # the other triggers - this repo's own secret of the same name (if set
+      # in this repo's Settings -> Secrets).
       - name: Determine which projects to run
         id: projects
         run: |

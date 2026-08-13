@@ -1,185 +1,221 @@
 # marketplace-e2e
 
-Osobne repo z testami Playwright dla całego marketplace'u. Nie należy ani do
-repo Next (`domena.pl`), ani do repo MF app — bo część testów przechodzi przez
-kilka apek naraz.
+A separate repo with Playwright tests for the whole marketplace. Doesn't
+belong to the Next repo (`domena.pl`) or the MF app repo — because some tests
+cross several apps at once.
 
-"MF app" to w rzeczywistości trzy procesy: `frontend-shell` (host, port
-8080), `react-app` (MF remote, port 8081) i `backend` (port 3000, prawdziwe
-auth + baza Postgres).
+"MF app" is actually three processes: `frontend-shell` (host, port 8080),
+`react-app` (MF remote, port 8081), and `backend` (port 3000, real auth +
+Postgres database).
 
-## Struktura
+## Structure
 
 ```
 tests/
-  marketing/   # testy tylko na Next (baseURL = MARKETING_URL)
-  app/         # testy tylko na frontend-shell (baseURL = APP_URL)
-    auth.spec.ts        # login/logout przez prawdziwy backend
-    test-user.ts         # stałe fixture usera, nadpisywalne env-ami
-    auth.setup.ts         # Playwright "setup project" - sieje fixture usera w Postgresie
-    auth.teardown.ts      # Playwright "teardown project" - sprząta fixture usera po testach
-  flows/       # testy przechodzące między domenami, pełne URL-e, bez baseURL
+  marketing/   # Next-only tests (baseURL = MARKETING_URL)
+  app/         # frontend-shell-only tests (baseURL = APP_URL)
+    auth.spec.ts        # login/logout through the real backend
+    test-user.ts         # fixed fixture user, overridable via env vars
+    auth.setup.ts         # Playwright "setup project" - seeds the fixture user in Postgres
+    auth.teardown.ts      # Playwright "teardown project" - cleans up the fixture user after tests
+  flows/       # cross-domain tests, full URLs, no baseURL
 ```
 
-`auth.setup.ts`/`auth.teardown.ts` są scope'owane wyłącznie do projektu `app`
-(patrz `dependencies`/`teardown` w `playwright.config.ts`) - `marketing` i
-`flows` nigdy nie potrzebują `E2E_DATABASE_URL`/dostępu do Postgresa, nawet
-pośrednio. To jest zmiana względem starszej wersji tego configu (top-level
-`globalSetup`/`globalTeardown`, leciały przy KAŻDYM uruchomieniu niezależnie
-od `--project`) - i dokładnie to sprawia, że wpięcie `app` do CI (patrz sekcja
-CI niżej) nie psuje `marketing`/`flows` w kontekstach bez dostępu do bazy.
+`auth.setup.ts`/`auth.teardown.ts` are scoped exclusively to the `app`
+project (see `dependencies`/`teardown` in `playwright.config.ts`) -
+`marketing` and `flows` never need `E2E_DATABASE_URL`/Postgres access, not
+even indirectly. This is a change from the older version of this config
+(top-level `globalSetup`/`globalTeardown`, which ran on EVERY run regardless
+of `--project`) - and it's exactly what makes wiring `app` into CI (see the
+CI section below) not break `marketing`/`flows` in contexts without database
+access.
 
-## Uruchamianie lokalnie
+## Running locally
 
-Cztery apki, cztery terminale:
+Four apps, four terminals:
 
 ```bash
-# terminal 1 — repo next-app
+# terminal 1 — next-app repo
 pnpm dev            # http://localhost:3000 (marketing)
 
-# terminal 2 — repo backend
-pnpm start:dev       # http://localhost:3000 -> UWAGA na kolizję portu z next-app,
-                      # patrz sekcja "Kolizja portów" niżej
+# terminal 2 — backend repo
+pnpm start:dev       # http://localhost:3000 -> NOTE the port collision with next-app,
+                      # see the "Port collision" section below
 
-# terminal 3 — repo react-app
+# terminal 3 — react-app repo
 pnpm dev             # http://localhost:8081 (MF remote)
 
-# terminal 4 — repo frontend-shell
+# terminal 4 — frontend-shell repo
 pnpm dev             # http://localhost:8080 (MF host)
 ```
 
-Piąty terminal na same testy:
+A fifth terminal for the tests themselves:
 
 ```bash
 cd e2e-tests
 cp .env.example .env
-# W .env ustaw E2E_DATABASE_URL na DOKŁADNIE tę samą wartość co DATABASE_URL
-# w backend/.env (obecnie Supabase, nie lokalny Postgres — patrz sekcja niżej).
-set -a; source .env; set +a   # eksportuje zmienne z .env do shella (brak dotenv w configu)
-npm install                   # pg + argon2 są już w devDependencies (potrzebne przez auth.setup.ts)
+# In .env, set E2E_DATABASE_URL to EXACTLY the same value as DATABASE_URL in
+# backend/.env (currently Supabase, not local Postgres — see the section below).
+set -a; source .env; set +a   # exports the vars from .env into the shell (no dotenv in the config)
+npm install                   # pg + argon2 are already in devDependencies (needed by auth.setup.ts)
 npx playwright install --with-deps
 npm test
 ```
 
-Albo pojedynczy projekt: `npm run test:marketing` / `npm run test:app` / `npm run test:flows`.
-`test:app`/`--project=app` automatycznie ciągnie za sobą `app-setup`
-(dependency) i `app-teardown` (teardown) - nie trzeba ich wywoływać osobno.
-`test:marketing`/`test:flows` NIE dotykają Postgresa w ogóle (patrz sekcja
-"Struktura" wyżej).
+Or a single project: `npm run test:marketing` / `npm run test:app` /
+`npm run test:flows`. `test:app`/`--project=app` automatically pulls in
+`app-setup` (dependency) and `app-teardown` (teardown) - no need to call them
+separately. `test:marketing`/`test:flows` do NOT touch Postgres at all (see
+"Structure" above).
 
-`test:app` (czyli `auth.spec.ts`) wymaga działającego `backend` i tej samej
-bazy co backend faktycznie używa — bez tego `auth.setup.ts` albo wywali się
-(brak `E2E_DATABASE_URL`), albo — gorzej — wsieje usera do bazy, której
-backend w ogóle nie widzi (i login się wywali z mylącym "Invalid email or
-password").
+`test:app` (i.e. `auth.spec.ts`) requires a running `backend` and the same
+database backend actually uses — without that, `auth.setup.ts` either fails
+(missing `E2E_DATABASE_URL`), or — worse — seeds a user into a database the
+backend can't see at all (and login then fails with a confusing "Invalid
+email or password").
 
-## Baza: Supabase, nie lokalny Postgres
+## Database: Supabase, not local Postgres
 
-Backend (przynajmniej ten, z którym testowałem) łączy się ze zdalną bazą na
-Supabase (`*.pooler.supabase.com`), a nie z lokalnym Postgresem uruchamianym
-przez `docker-compose` — to była błędna założenie przeniesione 1:1 z
-oryginalnego repo frontend-shell (sprzed migracji backendu na GCP/Supabase).
-Zanim uznasz `E2E_DATABASE_URL` za "gotowe i zapomniane": to realna zdalna
-baza — jeśli jest współdzielona ze staging albo z realnymi danymi, seedowanie
-fixture usera przy każdym uruchomieniu testów lokalnie może nie być czymś,
-co chcesz robić bez zastanowienia. Rozważ dedykowaną bazę/branch Supabase
-tylko do dev/testów, jeśli jeszcze takiej nie ma.
+The backend (at least the one I tested against) connects to a remote
+database on Supabase (`*.pooler.supabase.com`), not the local Postgres
+started via `docker-compose` — this was a wrong assumption carried over 1:1
+from the original frontend-shell repo (from before the backend migrated to
+GCP/Supabase). Before treating `E2E_DATABASE_URL` as "set and forget": this
+is a real remote database — if it's shared with staging or with real data,
+seeding a fixture user on every local test run might not be something you
+want to do without thinking about it. Consider a dedicated Supabase
+database/branch for dev/testing only, if one doesn't already exist.
 
-## TODO: lokalna baza testowa (bez odpalania backendu)
+## Test database: a second, separate Supabase project (dev/test)
 
-Docelowo: `auth.setup.ts`/`auth.teardown.ts` mają wykrywać lokalnie stojącą
-bazę testową (np. Postgres z `docker-compose`, osobny od Supabase opisanego
-wyżej) i siać/czyścić fixture usera bezpośrednio w niej, zamiast wymagać
-żeby `backend` faktycznie stał uruchomiony w osobnym terminalu. To skróci
-"cztery terminale" z sekcji wyżej do trzech przy pracy nad samym frontendem/
-e2e.
+Instead of local Postgres (`docker-compose`, considered earlier) or Supabase
+Branching (paid — Pro plan + per-branch-hour, see below) - a second free
+Supabase project (you get 2 on the free tier), dedicated solely to local
+work/testing, isolated from real data.
 
-**Nie jest to jeszcze zaimplementowane** — nie ma jeszcze ustalonego
-środowiska testowego (schemat/seed/sposób uruchomienia lokalnej bazy). Ta
-sekcja to zapowiedź kierunku, nie instrukcja — wracamy do tego (i faktycznie
-edytujemy `auth.setup.ts`/`auth.teardown.ts`/`.env.example`) jak środowisko
-testowe będzie gotowe. Do tego czasu obowiązuje sekcja "Baza: Supabase, nie
-lokalny Postgres" wyżej — `test:app` nadal wymaga realnego `backend` i
-`E2E_DATABASE_URL` wskazującego na tę samą bazę co backend.
+**This does NOT eliminate the need to run `backend` locally** - you're still
+testing through a real `POST /auth/login`, so `backend` still has to be
+running. What changes is only which database it connects to - a safe, empty
+test one instead of the shared/prod one. The "detect local database" idea
+considered earlier (see this file's history) turned out to be unnecessary -
+deliberately switching `DATABASE_URL`/`E2E_DATABASE_URL` to the second
+project is simpler.
 
-## Kolizja portów: next-app vs backend
+Why not Supabase Branching: it requires the Pro plan (branching is disabled
+on the free tier) and assumes migrations in the Supabase CLI format
+(`supabase/migrations/*.sql`) - here migrations run through
+`prisma migrate deploy`, a different format/different runner. Not worth that
+complexity at this portfolio-project stage.
 
-Domyślny port Next.js (`3000`) pokrywa się z domyślnym portem backendu. Jeśli
-oba repo faktycznie próbują wystartować na 3000 lokalnie, jedno z nich musi
-mieć zmieniony port (np. next-app na inny, z odpowiednią zmianą
-`MARKETING_URL` w `.env`). Sprawdź jak to masz obecnie skonfigurowane w
-next-app zanim odpalisz oba naraz.
+Setup (once):
 
-## Ważne: cookie sesji nie jest testowane lokalnie
+1. New project's Supabase dashboard → Project Settings → Database →
+   Connection string → **direct connection (port 5432)**, not the pooler
+   (6543) - locally it's one backend, one connection, the pooler isn't
+   needed here and adds a gotcha with Prisma prepared statements
+   (`pgbouncer=true` param).
+2. In `backend/`, create `.env.test.local` (already in `.gitignore`, nothing
+   leaks into the repo) with `DATABASE_URL=<connection string from step 1>` +
+   the rest of the variables from `.env.example`.
+3. Apply the schema to the empty database:
+   `npx dotenv-cli -e .env.test.local -- npx prisma migrate deploy` (in
+   `backend/`).
 
-Cookie sesji (docelowo `Domain=.domena.pl`) na `localhost` to różne originy
-(różne porty), nie subdomeny tej samej domeny — więc lokalny przebieg
-`tests/flows/` sprawdza samą ścieżkę funkcjonalną, ale NIE potwierdza że
-sesja faktycznie przechodzi między Next a MF app. Realną weryfikację robi
-dopiero przebieg w CI na staging z prawdziwymi subdomenami.
+Day to day (local `app`/`flows` e2e):
+
+```bash
+# backend terminal - points at the test database instead of the default .env
+cd backend
+npx dotenv-cli -e .env.test.local -- npm run start:dev
+```
+
+In `e2e-tests/.env`, set `E2E_DATABASE_URL` to **exactly the same**
+connection string as in `backend/.env.test.local` (see the warning in the
+"Database: Supabase, not local Postgres" section above - different databases
+= `auth.setup.ts` seeds a user where the backend can't see it).
+
+## Port collision: next-app vs backend
+
+Next.js's default port (`3000`) collides with the backend's default port. If
+both repos actually try to start on 3000 locally, one of them needs a
+different port (e.g. next-app on another port, with a matching
+`MARKETING_URL` change in `.env`). Check how you currently have this
+configured in next-app before starting both at once.
+
+## Important: the session cookie isn't tested locally
+
+The session cookie (eventually `Domain=.domena.pl`) on `localhost` is
+different origins (different ports), not subdomains of the same domain — so
+a local run of `tests/flows/` checks the functional path itself, but does
+NOT confirm the session actually carries over between Next and the MF app.
+Real verification only happens on a CI run against staging with real
+subdomains.
 
 ## CI
 
-Workflow (`.github/workflows/e2e.yml`) zawsze odpala `marketing` + `flows`
-przeciw staging. Projekt `app` (auth przez prawdziwy backend + Postgres)
-dołącza się **warunkowo** - tylko gdy sekret `E2E_DATABASE_URL` jest
-faktycznie przekazany (bezpośrednio jako sekret tego repo dla
-`workflow_dispatch`/`schedule`/`repository_dispatch`, albo przekazany przez
-wywołującego przy `workflow_call`, patrz przykład niżej). Bez niego workflow
-po prostu pomija `app` i leci jak wcześniej - to jest bezpieczny fallback, nie
-błąd.
+The workflow (`.github/workflows/e2e.yml`) always runs `marketing` + `flows`
+against staging. The `app` project (auth through a real backend + Postgres)
+joins **conditionally** - only when the `E2E_DATABASE_URL` secret is
+actually passed (either directly as a secret of this repo for
+`workflow_dispatch`/`schedule`/`repository_dispatch`, or passed by the
+caller on `workflow_call`, see the example below). Without it, the workflow
+just skips `app` and runs as before - that's a safe fallback, not an error.
 
-Obecnie żadne repo jeszcze nie przekazuje tego sekretu (patrz
-`backend/.github/workflows/deploy-gcp-staging.yml` - ma na to miejsce
-przygotowane, ale zakomentowane do czasu aż `frontend-shell`/`react-app` będą
-mieć własny staging, inaczej `app_url` wskazywałoby na nieistniejący
-deployment i projekt `app` i tak by nie przeszedł).
+`backend/.github/workflows/deploy-gcp-staging.yml`, and the Azure workflows
+in `react-app`/`frontend-shell`, now all call this workflow with `app_url`/
+`api_url`/`E2E_DATABASE_URL` wired up (react-app and frontend-shell got their
+own staging deploys - see `infra/RUNBOOK.md`). This doesn't run end-to-end
+yet in practice, since none of the repo Variables/Secrets it depends on
+(`FRONTEND_SHELL_STAGING_URL`, `BACKEND_STAGING_URL`,
+`E2E_DATABASE_URL_STAGING`, etc. - full list in `infra/RUNBOOK.md` section 6)
+are set anywhere yet — until then, `app` is safely skipped and
+`marketing`/`flows` still run.
 
-## Wpięcie do CI innych repo
+## Wiring into other repos' CI
 
-Dwa sposoby - wybierz w zależności od tego, czy potrzebujesz wiedzieć w tym
-samym przebiegu CI, czy e2e przeszło (np. żeby zbudować na tym job "promote to
-prod"), czy tylko chcesz je odpalić "w tle".
+Two ways - pick based on whether you need to know within the same CI run
+whether e2e passed (e.g. to build a "promote to prod" job on top of it), or
+just want to fire it "in the background".
 
-### Preferowane: workflow_call (daje `needs.e2e.result`)
+### Preferred: workflow_call (gives you `needs.e2e.result`)
 
-Wywołaj ten workflow bezpośrednio jako job w workflowie deployującym na
-staging - to jest ten sam przebieg CI, więc kolejny job może zależeć od
-wyniku:
+Call this workflow directly as a job in the workflow that deploys to
+staging - it's the same CI run, so a later job can depend on the result:
 
 ```yaml
 jobs:
   deploy-staging:
-    # ... deploy do stagingu ...
+    # ... deploy to staging ...
 
   e2e:
     needs: deploy-staging
     uses: szczypkaweb/marketplace-e2e/.github/workflows/e2e.yml@main
     with:
-      marketing_url: https://staging.domena.pl   # tylko next-app
-      app_url: https://staging-app.domena.pl     # tylko MF app
-      api_url: https://backend-staging-xxxxx.run.app  # tylko projekt app (auth.spec.ts)
+      marketing_url: https://staging.domena.pl   # next-app only
+      app_url: https://staging-app.domena.pl     # MF app only
+      api_url: https://backend-staging-xxxxx.run.app  # app project only (auth.spec.ts)
     secrets:
-      E2E_DATABASE_URL: ${{ secrets.E2E_DATABASE_URL_STAGING }}   # opcjonalne - bez tego projekt app jest pomijany
+      E2E_DATABASE_URL: ${{ secrets.E2E_DATABASE_URL_STAGING }}   # optional - without it the app project is skipped
 
   promote-to-prod:
     needs: e2e
     if: needs.e2e.result == 'success'
     runs-on: ubuntu-latest
     steps:
-      - run: echo "otwórz/zmerguj PR staging -> main tutaj"
+      - run: echo "open/merge the staging -> main PR here"
 ```
 
-Nie wymaga PAT-a ani sekretu w repo źródłowym - `uses:` z publicznego/tego
-samego org repo działa bez dodatkowej autoryzacji (przy prywatnym repo:
-`GITHUB_TOKEN` z odpowiednim `permissions` w wywołującym workflow wystarczy,
-patrz [docs GitHub o reusable workflows](https://docs.github.com/en/actions/using-workflows/reusing-workflows)).
+Doesn't need a PAT or a secret in the calling repo - `uses:` from a
+public/same-org repo works without extra authorization (for a private repo:
+`GITHUB_TOKEN` with the right `permissions` in the calling workflow is
+enough, see the
+[GitHub docs on reusable workflows](https://docs.github.com/en/actions/using-workflows/reusing-workflows)).
 
-### Fallback: repository_dispatch (jednokierunkowe, bez informacji zwrotnej)
+### Fallback: repository_dispatch (one-way, no feedback)
 
-Dodaj w workflowie repo źródłowego krok wysyłający `repository_dispatch` do
-tego repo (potrzebny PAT z uprawnieniem `repo`, zapisany jako sekret
-`E2E_REPO_PAT` w repo źródłowym):
+Add a step in the source repo's workflow that sends a `repository_dispatch`
+to this repo (needs a PAT with `repo` scope, stored as the `E2E_REPO_PAT`
+secret in the source repo):
 
 ```yaml
 - name: Trigger e2e
@@ -191,24 +227,25 @@ tego repo (potrzebny PAT z uprawnieniem `repo`, zapisany jako sekret
       -d '{"event_type":"staging-deployed"}'
 ```
 
-Ten sposób NIE daje żadnej informacji zwrotnej do repo źródłowego (osobny,
-niepowiązany przebieg CI) - nie da się na nim zbudować promote-to-prod. Trzymany
-głównie dla wstecznej kompatybilności / jako alternatywa gdy `workflow_call`
-nie pasuje (np. wywołanie z zupełnie innego triggera niż deploy).
+This way gives NO feedback at all to the source repo (a separate, unrelated
+CI run) - you can't build a promote-to-prod on top of it. Kept mainly for
+backward compatibility / as an alternative when `workflow_call` doesn't fit
+(e.g. triggering from a completely different event than a deploy).
 
-Do czasu wpięcia któregokolwiek z powyższych, e2e i tak leci co noc o 5:00 UTC
-(`schedule` w workflow) i można je odpalić ręcznie (`workflow_dispatch`).
+Until either of the above is wired up, e2e still runs nightly at 5:00 UTC
+(`schedule` in the workflow) and can be triggered manually
+(`workflow_dispatch`).
 
-## Sprzątanie w repo frontend-shell
+## Cleanup in the frontend-shell repo
 
-Testy auth pochodzą z repo `frontend-shell` (`e2e/` w tamtym repo). Po
-migracji tutaj, w `frontend-shell`:
+The auth tests came from the `frontend-shell` repo (`e2e/` there). After
+migrating them here, in `frontend-shell`:
 
 ```bash
 npm uninstall @playwright/test pg argon2
 rm -rf e2e/ playwright.config.ts
 ```
 
-i usuń skrypt `test:e2e` z jego `package.json` (jeśli nie było tam wpiętego
-kroku CI dla Playwrighta, nic więcej nie trzeba zmieniać w workflowach tego
-repo).
+and remove the `test:e2e` script from its `package.json` (if there was no
+Playwright CI step wired up there, nothing else needs to change in that
+repo's workflows).

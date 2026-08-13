@@ -1,17 +1,18 @@
 import 'dotenv/config';
 import { defineConfig, devices } from '@playwright/test';
 
-// Ładuje .env automatycznie (wymaga `dotenv` w devDependencies) — nie trzeba
-// już ręcznie `set -a; source .env; set +a` przed każdym uruchomieniem.
+// Loads .env automatically (requires `dotenv` in devDependencies) — no need
+// to manually `set -a; source .env; set +a` before every run anymore.
 //
-// Repozytoria Next (marketing) i MF app (frontend-shell + react-app) są
-// osobne, więc ten config NIE odpala ich sam (brak pola `webServer`).
-// Serwery muszą już działać pod tymi adresami — lokalnie uruchomione ręcznie
-// w osobnych terminalach, albo (w CI) jako wdrożone środowisko staging.
+// The Next repo (marketing) and the MF app (frontend-shell + react-app) are
+// separate, so this config does NOT start them itself (no `webServer`
+// field). The servers must already be running at these addresses — started
+// manually in separate terminals locally, or (in CI) as a deployed staging
+// environment.
 //
 // "MF app" = frontend-shell (host, port 8080) + react-app (MF remote, port
-// 8081) + backend (port 3000, prawdziwe auth + baza). tests/app/auth.spec.ts
-// wymaga wszystkich trzech — patrz README.md.
+// 8081) + backend (port 3000, real auth + database). tests/app/auth.spec.ts
+// needs all three — see README.md.
 const MARKETING_URL = process.env.MARKETING_URL ?? 'http://localhost:3000';
 const APP_URL = process.env.APP_URL ?? 'http://localhost:8080';
 
@@ -59,8 +60,8 @@ export default defineConfig({
     },
     {
       name: 'flows',
-      // Testy przechodzące między domenami — celowo bez baseURL,
-      // nawigacja pełnymi URL-ami (patrz tests/flows/full-journey.spec.ts).
+      // Cross-domain tests — deliberately without a baseURL, navigation uses
+      // full URLs (see tests/flows/full-journey.spec.ts).
       testDir: './tests/flows',
       use: { ...devices['Desktop Chrome'] },
     },
