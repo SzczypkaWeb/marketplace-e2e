@@ -1,0 +1,26 @@
+name: CI
+
+# A required PR check for this repo's own changes. Deliberately NOT the same
+# as e2e.yml's real `e2e` job: that one needs live staging URLs + a database,
+# which don't exist for an arbitrary PR branch. This just parses every spec
+# file (`playwright test --list` compiles and enumerates tests without
+# running them) to catch syntax/import errors before merge - no browsers,
+# no live environment needed.
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm ci
+
+      - name: Parse all specs (no run)
+        run: npx playwright test --list
