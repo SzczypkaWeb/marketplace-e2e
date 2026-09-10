@@ -177,6 +177,32 @@ Two ways - pick based on whether you need to know within the same CI run
 whether e2e passed (e.g. to build a "promote to prod" job on top of it), or
 just want to fire it "in the background".
 
+### Current orchestration status (known gaps)
+
+**Important:** CI currently **only runs the `tests/marketing` and `tests/flows`
+suites** against staging. The `tests/app` project is **intentionally excluded**
+from CI runs because it requires:
+
+- A **live backend** running (not just a deployed staging frontend)
+- Direct **database access** (`E2E_DATABASE_URL`) pointing to the same
+  Postgres/Supabase instance the backend uses (see `tests/app/global-setup.ts`,
+  which seeds a fixture user via direct SQL)
+
+This wiring is **not yet set up in CI** — until it is, `app` is safely skipped
+and only `marketing`/`flows` run. See the README's "CI" section (above) for
+details on how it skips `app` when `E2E_DATABASE_URL` is not provided.
+
+**Also:** No upstream repo currently sends the `repository_dispatch` event (type
+`staging-deployed`) to this repo. The trigger **exists and is wired to accept
+it**, but nothing (e.g. backend deploy workflow, frontend-shell deploy
+workflow) fires it yet. Today this workflow only actually runs via:
+
+- `workflow_dispatch` (manual trigger from GitHub Actions)
+- `schedule` (nightly cron, 5:00 UTC)
+
+When an upstream repo is ready to wire this in (either via `workflow_call` —
+preferred — or `repository_dispatch`), update this note.
+
 ### Preferred: workflow_call (gives you `needs.e2e.result`)
 
 Call this workflow directly as a job in the workflow that deploys to
