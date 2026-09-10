@@ -173,9 +173,39 @@ are set anywhere yet — until then, `app` is safely skipped and
 
 ## Wiring into other repos' CI
 
-Two ways - pick based on whether you need to know within the same CI run
-whether e2e passed (e.g. to build a "promote to prod" job on top of it), or
-just want to fire it "in the background".
+### Current orchestration status
+
+⚠️ **Note on current CI coverage and upstream wiring:**
+
+1. **.github/workflows/e2e.yml presently runs only `tests/marketing` and
+   `tests/flows` against staging** — `tests/app` is **NOT** included. The
+   `app` project (auth through the real backend + Postgres) is conditionally
+   gated by the `E2E_DATABASE_URL` secret. Without it, the workflow safely
+   skips `app` and runs the other two projects - see the "Determine which
+   projects to run" step in the workflow.
+
+2. **No other repo currently sends the `staging-deployed`
+   `repository_dispatch` event.** The trigger exists in this workflow (and
+   the example below shows how to add it), but **upstream repos** (backend,
+   frontend-shell, react-app, next-app) are not yet calling it. Until that
+   wiring is added to their deploy workflows, the `repository_dispatch`
+   method remains a template you can follow, not yet active.
+
+3. **`tests/app/auth.setup.ts` seeds the fixture user directly into
+   Postgres via `E2E_DATABASE_URL`** — this connection string **must match
+   the backend's actual `DATABASE_URL`** (currently Supabase, not local
+   Postgres). This is a **manual, easy-to-drift dependency**: if someone
+   changes the backend's database without updating `E2E_DATABASE_URL` in
+   this repo's CI secrets (or your local `.env`), the setup will write to
+   the wrong database and tests will fail with confusing "Invalid email or
+   password" errors. See the "Test database" section above for how to keep
+   this in sync during local development.
+
+### How to integrate with other repos
+
+Two ways to wire up this workflow - pick based on whether you need to know
+within the same CI run whether e2e passed (e.g. to build a "promote to prod"
+job on top of it), or just want to fire it "in the background".
 
 ### Preferred: workflow_call (gives you `needs.e2e.result`)
 
