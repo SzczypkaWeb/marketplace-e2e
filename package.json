@@ -8,6 +8,7 @@
     "test:app": "playwright test --project=app",
     "test:flows": "playwright test --project=flows",
     "test:ui": "playwright test --ui",
+    "test:docs": "node test-readme-ci-orchestration.js",
     "report": "playwright show-report",
     "install-browsers": "playwright install --with-deps"
   },
