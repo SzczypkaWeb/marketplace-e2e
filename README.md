@@ -173,6 +173,37 @@ are set anywhere yet — until then, `app` is safely skipped and
 
 ## Wiring into other repos' CI
 
+> ### Current orchestration status (read before assuming this is fully wired up)
+>
+> `.github/workflows/e2e.yml` is triggered three ways: manually via
+> `workflow_dispatch`, by a `repository_dispatch` event of type
+> `staging-deployed`, and by a nightly cron schedule. **As of now, CI only
+> executes `tests/marketing` and `tests/flows` against staging.**
+> `tests/app` is intentionally excluded from CI: it needs a live backend
+> plus a real database to authenticate against, and that combination isn't
+> provisioned/wired up in this pipeline yet.
+>
+> **The `repository_dispatch` trigger is wired but currently unused.**
+> No other repo in the org emits the `staging-deployed` event yet, so
+> today this workflow only ever actually runs via `workflow_dispatch` or
+> the nightly cron - the dispatch trigger just sits there, ready for a
+> deploying repo's workflow to send it once one does, e.g. via
+> `gh api repos/:owner/:repo/dispatches -f event_type=staging-deployed`
+> or the [`peter-evans/repository-dispatch`](https://github.com/peter-evans/repository-dispatch)
+> action, as a step after a successful staging deploy.
+>
+> **If/when `tests/app` is added to CI:** its fixture-user seeding script
+> (`tests/app/auth.setup.ts`, the successor to the old
+> `tests/app/global-setup.ts`) writes the fixture user directly into
+> Postgres via the `E2E_DATABASE_URL` env var. That value must point at
+> the *same* database as the backend's live `DATABASE_URL` - currently a
+> Supabase project, not a local/ephemeral Postgres instance - or the
+> fixture gets seeded into the wrong database and the tests fail to log
+> in. In practice, enabling `tests/app` in CI means supplying a working
+> `E2E_DATABASE_URL` secret plus a reachable `APP_URL` pointing at an
+> actually-deployed `frontend-shell` instance - neither of which this
+> pipeline has today.
+
 Two ways - pick based on whether you need to know within the same CI run
 whether e2e passed (e.g. to build a "promote to prod" job on top of it), or
 just want to fire it "in the background".
