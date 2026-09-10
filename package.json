@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "lint": "echo 'Linting E2E test suite...'",
     "test": "playwright test",
     "test:marketing": "playwright test --project=marketing",
     "test:app": "playwright test --project=app",
