@@ -173,6 +173,14 @@ are set anywhere yet — until then, `app` is safely skipped and
 
 ## Wiring into other repos' CI
 
+> **CI Orchestration Status & Current Scope**
+>
+> This repo orchestrates cross-domain E2E tests across three suites: `tests/marketing` targets next-app only (baseURL=MARKETING_URL), `tests/app` targets frontend-shell plus a real backend/DB (baseURL=APP_URL), and `tests/flows` spans both via full URLs with no baseURL.
+>
+> `.github/workflows/e2e.yml` currently runs only the `marketing` and `flows` suites in CI against staging, triggered by `workflow_dispatch`, the `staging-deployed` repository_dispatch event, or a nightly cron. The `app` suite is not yet wired into CI because it requires a live backend and database in the CI environment; its `global-setup.ts` seeds a fixture user via `E2E_DATABASE_URL`, which **must match the backend repo's actual DATABASE_URL** (currently Supabase, not local Postgres) — misconfiguring this seeds the fixture into the wrong database, breaking the tests.
+>
+> **Note:** As of now, no other repo (backend, frontend-shell, react-app, next-app) actually sends the `staging-deployed` dispatch event yet, so this CI trigger is currently dormant until an upstream repo's deploy workflow is updated to send it.
+
 Two ways - pick based on whether you need to know within the same CI run
 whether e2e passed (e.g. to build a "promote to prod" job on top of it), or
 just want to fire it "in the background".
