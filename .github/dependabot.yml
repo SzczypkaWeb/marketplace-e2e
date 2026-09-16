@@ -1,0 +1,33 @@
+version: 2
+
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "chore"
+    # Bundles every minor/patch bump into a single weekly PR instead of one
+    # PR per package (that's what turned into a flood of 5+ separate PRs on
+    # shared-ui). Majors are deliberately left ungrouped and unbundled -
+    # those need an actual look (see the TS 6.0 / React 19 bumps on
+    # shared-ui), grouping them together would just make a bad review worse.
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore"
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
