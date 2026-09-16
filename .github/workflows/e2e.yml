@@ -71,7 +71,7 @@ jobs:
       # pnpm project with no package-lock.json in place of this repo's own
       # tests, so `npm ci` failed with "no package-lock.json found" - a
       # confusing error that has nothing to do with this repo's actual lockfile.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: szczypkaweb/marketplace-e2e
           token: ${{ secrets.E2E_REPO_CHECKOUT_TOKEN || github.token }}
