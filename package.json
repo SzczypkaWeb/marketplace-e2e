@@ -2,6 +2,7 @@
   "name": "marketplace-e2e",
   "version": "1.0.0",
   "private": true,
+  "description": "A separate repo with Playwright tests for the whole marketplace.",
   "scripts": {
     "lint": "node tests/marketing/test-readme-ci-docs.js",
     "test": "playwright test",
