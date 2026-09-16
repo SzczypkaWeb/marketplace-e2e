@@ -4,7 +4,7 @@
   "private": true,
   "description": "A separate repo with Playwright tests for the whole marketplace.",
   "scripts": {
-    "lint": "node tests/marketing/test-readme-ci-docs.js",
+    "lint": "node tests/marketing/test-readme-ci-docs.js && node tests/repo-config/nvmrc.test.js",
     "test": "playwright test",
     "test:marketing": "playwright test --project=marketing",
     "test:app": "playwright test --project=app",
