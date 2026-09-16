@@ -12,7 +12,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const README_PATH = path.join(__dirname, 'README.md');
+const README_PATH = path.join(__dirname, '../../README.md');
 
 function readFileContent() {
   return fs.readFileSync(README_PATH, 'utf-8');
