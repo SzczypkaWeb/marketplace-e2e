@@ -14,9 +14,9 @@
     "test:docs": "node test-readme-ci-orchestration.js"
   },
   "devDependencies": {
-    "@playwright/test": "^1.48.0",
+    "@playwright/test": "^1.63.0",
     "argon2": "^0.45.1",
     "dotenv": "^17.4.2",
-    "pg": "^8.22.0"
+    "pg": "^8.23.0"
   }
 }
