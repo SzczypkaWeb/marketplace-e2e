@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "lint": "node test-readme-ci-docs.js",
+    "lint": "node tests/marketing/test-readme-ci-docs.js",
     "test": "playwright test",
     "test:marketing": "playwright test --project=marketing",
     "test:app": "playwright test --project=app",
@@ -11,7 +11,7 @@
     "test:ui": "playwright test --ui",
     "report": "playwright show-report",
     "install-browsers": "playwright install --with-deps",
-    "test:docs": "node test-readme-ci-orchestration.js"
+    "test:docs": "node tests/marketing/test-readme-ci-orchestration.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",

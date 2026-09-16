@@ -20,7 +20,7 @@ const colors = {
   blue: '\x1b[34m',
 };
 
-const readmePath = path.join(__dirname, 'README.md');
+const readmePath = path.join(__dirname, '../../README.md');
 const readmeContent = fs.readFileSync(readmePath, 'utf-8');
 
 let passed = 0;
