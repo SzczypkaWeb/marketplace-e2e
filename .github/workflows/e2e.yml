@@ -76,7 +76,7 @@ jobs:
           repository: szczypkaweb/marketplace-e2e
           token: ${{ secrets.E2E_REPO_CHECKOUT_TOKEN || github.token }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
 
